@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>회로 대결 (Circuit Duel) - 벡터 게임</title>
+<style>
+  :root{
+    --bg:#12141c; --panel:#1b1f2c; --line:#333850; --text:#e8e9f2; --dim:#8a8fa8;
+    --a:#ff5d6c; --a-glow:#ff8a94; --b:#4da3ff; --b-glow:#8cc4ff;
+    --gold:#ffd76a; --insul:#8b90a3;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:radial-gradient(circle at 30% 0%, #1a1f30, var(--bg) 60%);
+    color:var(--text); font-family:'Segoe UI', 'Malgun Gothic', sans-serif;
+    display:flex; align-items:flex-start; justify-content:center; gap:28px;
+    padding:28px; flex-wrap:wrap;
+  }
+  h1{font-size:20px; margin:0 0 4px; letter-spacing:.5px;}
+  .sub{color:var(--dim); font-size:13px; margin-bottom:16px;}
+  .layout{display:flex; gap:24px; flex-wrap:wrap; justify-content:center;}
+  .board-wrap{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.4); position:relative;}
+  #board{ width:540px; height:540px; display:block; }
+
+  .edge-visible{ stroke:#3a3f57; stroke-width:4; stroke-linecap:round; }
+  .edge-suggest{ stroke:#565c86; stroke-width:6; stroke-linecap:round; filter:drop-shadow(0 0 4px #7b82c4); }
+  .edge-hit{ fill:none; stroke:transparent; stroke-width:18; cursor:pointer; }
+  .edge-diode-A{ stroke:var(--a-glow); filter:drop-shadow(0 0 4px var(--a)); }
+  .edge-diode-B{ stroke:var(--b-glow); filter:drop-shadow(0 0 4px var(--b)); }
+  .edge-insulator{ stroke:var(--insul); stroke-width:7; stroke-linecap:round; stroke-dasharray:2 7; }
+
+  .cell-hit{ fill:transparent; cursor:pointer; }
+  .cell-hit:hover{ fill:#ffffff08; }
+  .diag-conductor{ stroke:var(--gold); stroke-width:6; stroke-linecap:round; filter:drop-shadow(0 0 6px var(--gold)); }
+
+  .node-dot{ fill:#454a63; stroke:#1b1f2c; stroke-width:2; }
+  .node-terminal.A{ fill:var(--a); filter:drop-shadow(0 0 8px var(--a)); }
+  .node-terminal.B{ fill:var(--b); filter:drop-shadow(0 0 8px var(--b)); }
+  .node-pick-candidate{ fill:#454a63; stroke:var(--gold); stroke-width:2; cursor:pointer; }
+  .node-pick-candidate:hover{ fill:#5a6086; }
+  .node-label{ font-size:20px; font-weight:800; fill:#fff; pointer-events:none; text-anchor:middle; dominant-baseline:central; }
+
+  .panel{ width:320px; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.4); }
+  .turn-badge{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:12px; font-weight:700; margin-bottom:14px; }
+  .turn-badge.A{ background:#ff5d6c22; border:1px solid var(--a); color:var(--a-glow); }
+  .turn-badge.B{ background:#4da3ff22; border:1px solid var(--b); color:var(--b-glow); }
+  .dot-sm{ width:12px; height:12px; border-radius:50%; }
+  .turn-badge.A .dot-sm{ background:var(--a); box-shadow:0 0 8px var(--a); }
+  .turn-badge.B .dot-sm{ background:var(--b); box-shadow:0 0 8px var(--b); }
+
+  .actions{ display:grid; gap:8px; margin-bottom:16px; }
+  .action-btn{
+    display:flex; justify-content:space-between; align-items:center;
+    background:#252a3a; border:1px solid var(--line); color:var(--text);
+    padding:10px 12px; border-radius:10px; cursor:pointer; font-size:13px;
+    transition:background .15s, border-color .15s;
+  }
+  .action-btn:hover{ background:#2d3346; }
+  .action-btn.active{ border-color:#fff; background:#33395024; box-shadow:0 0 0 1px #ffffff33; }
+  .action-btn.disabled{ opacity:.35; cursor:not-allowed; }
+  .action-btn .count{ font-size:11px; color:var(--dim); }
+
+  .picker{ background:#14161f; border:1px solid var(--gold); border-radius:10px; padding:12px; margin-bottom:16px; }
+  .picker .ptitle{ font-size:12px; color:var(--gold); margin-bottom:8px; font-weight:700; }
+  .picker .pbtns{ display:flex; gap:8px; }
+  .picker button{ flex:1; padding:10px; border-radius:8px; border:1px solid var(--line); background:#252a3a; color:var(--text); font-size:16px; cursor:pointer; }
+  .picker button:hover{ background:#333a52; }
+  .picker .cancel{ margin-top:8px; width:100%; padding:6px; font-size:12px; background:transparent; border:1px solid var(--line); color:var(--dim); border-radius:8px; cursor:pointer; }
+
+  .log{ background:#14161f; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:12px; color:var(--dim); height:100px; overflow-y:auto; margin-bottom:14px; line-height:1.6; }
+  .log div.you{ color:var(--text); }
+
+  .rules{ font-size:11.5px; color:var(--dim); line-height:1.7; }
+  .rules b{ color:var(--text); }
+  .rules details{ margin-top:6px; }
+  .rules summary{ cursor:pointer; color:var(--text); font-weight:600; }
+
+  #restart{ width:100%; padding:10px; border-radius:10px; border:1px solid var(--line); background:#252a3a; color:var(--text); cursor:pointer; margin-top:4px; font-weight:600; }
+  #restart:hover{ background:#2d3346; }
+
+  .setup-box{ text-align:center; }
+  .setup-box h2{ font-size:16px; margin:0 0 6px; }
+  .setup-box p{ color:var(--dim); font-size:12.5px; line-height:1.6; margin:0 0 14px; }
+  .setup-box .picked{ font-size:12px; color:var(--gold); margin-bottom:10px; min-height:16px; }
+
+  .overlay{ position:fixed; inset:0; background:#000000cc; display:none; align-items:center; justify-content:center; z-index:50; }
+  .overlay.show{ display:flex; }
+  .overlay .card{ background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:36px 48px; text-align:center; box-shadow:0 20px 60px #000; max-width:420px; }
+  .overlay .card h2{ font-size:24px; margin:0 0 8px; }
+  .overlay .card p{ color:var(--dim); margin:0 0 18px; line-height:1.6; }
+  .overlay .card button{ padding:10px 22px; border-radius:10px; border:none; background:var(--text); color:#111; font-weight:700; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <div>
+    <h1>⚡ 회로 대결 (Circuit Duel)</h1>
+    <div class="sub">P-N 다이오드로 자기 진영의 단자를 연결하면 승리! · A(빨강) vs B(파랑)</div>
+    <div class="board-wrap">
+      <svg id="board" viewBox="0 0 540 540" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+  </div>
+
+  <div class="panel" id="sidePanel"></div>
+</div>
+
+<div class="overlay" id="handoffOverlay">
+  <div class="card">
+    <h2 id="handoffTitle">화면을 넘겨주세요</h2>
+    <p id="handoffDesc"></p>
+    <button id="handoffBtn">확인</button>
+  </div>
+</div>
+
+<div class="overlay" id="winOverlay">
+  <div class="card">
+    <h2 id="winTitle">🏆 승리!</h2>
+    <p id="winDesc"></p>
+    <button id="winRestart">다시 하기</button>
+  </div>
+</div>
+
+<script>
+const N = 6;               // nodes per side (0..5) -> 5x5 cells
+const SPACING = 90, MARGIN = 45;
+const CELLS = N - 1;
+
+function key(r,c){ return r+','+c; }
+function pos(r,c){ return { x: MARGIN + c*SPACING, y: MARGIN + r*SPACING }; }
+function isBoundary(r,c){ return r===0 || r===N-1 || c===0 || c===N-1; }
+function eq(p1,p2){ return p1 && p2 && p1[0]===p2[0] && p1[1]===p2[1]; }
+
+function edgesAtNode(r,c){
+  const list = [];
+  if(c>0) list.push({o:'H', r, c:c-1});
+  if(c<N-1) list.push({o:'H', r, c});
+  if(r>0) list.push({o:'V', r:r-1, c});
+  if(r<N-1) list.push({o:'V', r, c});
+  return list;
+}
+function getEdge(o,r,c){ return o==='H' ? hEdges[r][c] : vEdges[r][c]; }
+function setEdge(o,r,c,val){ if(o==='H') hEdges[r][c]=val; else vEdges[r][c]=val; }
+function edgeEndpoints(o,r,c){ return o==='H' ? [[r,c],[r,c+1]] : [[r,c],[r+1,c]]; }
+
+let hEdges, vEdges, diag, terminals, current, counts, action, pendingTarget, phase, gameOver, logArr;
+let setupSide, setupStep, tempStart, tempEnd, setupMsg;
+let boardEl, sideEl;
+
+function initGame(){
+  hEdges = Array.from({length:N}, ()=>Array(N-1).fill(null));
+  vEdges = Array.from({length:N-1}, ()=>Array(N).fill(null));
+  diag   = Array.from({length:CELLS}, ()=>Array(CELLS).fill(null));
+  terminals = { A: [], B: [] };
+  current = 'A';
+  counts = { A:{diagonal:1, insulator:1}, B:{diagonal:1, insulator:1} };
+  action = 'diode';
+  pendingTarget = null;
+  gameOver = false;
+  logArr = [];
+  phase = 'setup';
+  setupSide = 'A'; setupStep = 'start';
+  tempStart = null; tempEnd = null; setupMsg = '';
+  document.getElementById('handoffOverlay').classList.remove('show');
+  render();
+  renderSidebar();
+}
+
+function log(msg, you=false){
+  logArr.push({msg, you});
+  const logEl = document.getElementById('logBox');
+  if(logEl){
+    logEl.innerHTML = logArr.map(l=>`<div class="${l.you?'you':''}">${l.msg}</div>`).join('');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+function flashMsg(m){ setupMsg = m; renderSidebar(); setTimeout(()=>{ setupMsg=''; renderSidebar(); }, 1600); }
+function flashBoardIllegal(){ boardEl.classList.add('shake'); setTimeout(()=>boardEl.classList.remove('shake'), 200); }
+
+// ---------- graph helpers ----------
+function diagonalNeighbors(r,c){
+  const res = [];
+  const candidates = [[r-1,c-1],[r-1,c],[r,c-1],[r,c]];
+  for(const [cr,cc] of candidates){
+    if(cr<0||cc<0||cr>CELLS-1||cc>CELLS-1) continue;
+    const d = diag[cr][cc];
+    if(!d) continue;
+    const TL=[cr,cc], TR=[cr,cc+1], BL=[cr+1,cc], BR=[cr+1,cc+1];
+    const pair = d.orient==='\\' ? [TL,BR] : [TR,BL];
+    if(eq(pair[0],[r,c])) res.push(pair[1]);
+    else if(eq(pair[1],[r,c])) res.push(pair[0]);
+  }
+  return res;
+}
+
+function forwardNeighbors(r,c){
+  const res = [];
+  if(c>0){ const e = hEdges[r][c-1]; if(e && e.type==='diode' && e.dir===1) res.push([r,c-1]); }
+  if(c<N-1){ const e = hEdges[r][c]; if(e && e.type==='diode' && e.dir===0) res.push([r,c+1]); }
+  if(r>0){ const e = vEdges[r-1][c]; if(e && e.type==='diode' && e.dir===1) res.push([r-1,c]); }
+  if(r<N-1){ const e = vEdges[r][c]; if(e && e.type==='diode' && e.dir===0) res.push([r+1,c]); }
+  for(const nb of diagonalNeighbors(r,c)) res.push(nb);
+  return res;
+}
+
+function checkWin(player){
+  const [start,end] = terminals[player];
+  const visited = new Set([key(start[0],start[1])]);
+  const queue = [start];
+  while(queue.length){
+    const [r,c] = queue.shift();
+    if(eq([r,c], end)) return true;
+    for(const [nr,nc] of forwardNeighbors(r,c)){
+      const k = key(nr,nc);
+      if(visited.has(k)) continue;
+      visited.add(k);
+      queue.push([nr,nc]);
+    }
+  }
+  return false;
+}
+
+function edgeHasOwnDiode(o,r,c,player){
+  const e = getEdge(o,r,c);
+  return !!(e && e.type==='diode' && e.placedBy===player);
+}
+function isAdjacentToOwnDiode(o,r,c,player){
+  const [n1,n2] = edgeEndpoints(o,r,c);
+  for(const n of [n1,n2]){
+    for(const e2 of edgesAtNode(n[0],n[1])){
+      if(e2.o===o && e2.r===r && e2.c===c) continue;
+      if(edgeHasOwnDiode(e2.o,e2.r,e2.c,player)) return true;
+    }
+  }
+  return false;
+}
+function edgeTouchesNode(o,r,c, node){
+  const [n1,n2] = edgeEndpoints(o,r,c);
+  return eq(n1,node) || eq(n2,node);
+}
+function hasAnyOwnDiode(player){
+  for(let r=0;r<N;r++) for(let c=0;c<N-1;c++){ const e=hEdges[r][c]; if(e && e.type==='diode' && e.placedBy===player) return true; }
+  for(let r=0;r<N-1;r++) for(let c=0;c<N;c++){ const e=vEdges[r][c]; if(e && e.type==='diode' && e.placedBy===player) return true; }
+  return false;
+}
+function canPlaceDiode(o,r,c,player){
+  if(!hasAnyOwnDiode(player)) return edgeTouchesNode(o,r,c, terminals[player][0]);
+  return isAdjacentToOwnDiode(o,r,c,player);
+}
+
+// ---------- setup phase ----------
+function onSetupNodeClick(r,c){
+  if(phase!=='setup') return;
+  if(setupStep==='start' || setupStep==='end'){
+    if(!isBoundary(r,c)){ flashMsg('가장자리(테두리) 노드만 선택할 수 있습니다.'); return; }
+    const other = setupSide==='A' ? 'B' : 'A';
+    if(terminals[other].some(p=>eq(p,[r,c]))){ flashMsg('이미 사용된 노드입니다. 다른 곳을 선택하세요.'); return; }
+    if(setupStep==='start'){
+      tempStart = [r,c];
+      setupStep = 'end';
+      render(); renderSidebar();
+    } else {
+      if(eq([r,c], tempStart)){ flashMsg('시작점과 다른 노드를 선택하세요.'); return; }
+      tempEnd = [r,c];
+      finishSetupSide();
+    }
+  }
+}
+
+function finishSetupSide(){
+  terminals[setupSide] = [tempStart, tempEnd];
+  if(setupSide==='A'){
+    setupSide = 'B'; setupStep = 'start'; tempStart=null; tempEnd=null;
+    render(); renderSidebar();
+    showHandoff('B 플레이어 차례', 'A의 선택이 완료되었습니다. B 플레이어가 화면을 확인하고, 시작점 → 끝점 순서로 단자를 정하세요.', ()=>{
+      render(); renderSidebar();
+    });
+  } else {
+    render(); renderSidebar();
+    showHandoff('준비 완료!', '양쪽 단자가 모두 정해졌습니다. 확인을 누르면 보드가 공개되고 게임이 시작됩니다. A부터 첫 턴을 시작하며, 각자의 첫 다이오드는 자신의 시작점과 맞닿은 변에만 놓을 수 있습니다.', ()=>{
+      phase='play'; current='A'; render(); renderSidebar();
+      log('게임 시작! A(빨강) 턴입니다.', true);
+    });
+  }
+}
+
+function showHandoff(title, desc, onConfirm){
+  document.getElementById('handoffTitle').textContent = title;
+  document.getElementById('handoffDesc').textContent = desc;
+  const overlay = document.getElementById('handoffOverlay');
+  overlay.classList.add('show');
+  const btn = document.getElementById('handoffBtn');
+  const handler = ()=>{ overlay.classList.remove('show'); btn.removeEventListener('click', handler); onConfirm(); };
+  btn.addEventListener('click', handler);
+}
+
+// ---------- play phase actions ----------
+function onEdgeClick(orientation, r, c){
+  if(phase!=='play' || gameOver) return;
+  if(action==='diode'){
+    if(getEdge(orientation,r,c)){ flashBoardIllegal(); return; }
+    if(!canPlaceDiode(orientation,r,c,current)){
+      flashMsg(hasAnyOwnDiode(current) ? '자신의 기존 다이오드와 맞닿은 변에만 설치할 수 있습니다.' : '첫 다이오드는 자신의 시작점과 맞닿은 변에만 설치할 수 있습니다.');
+      return;
+    }
+    pendingTarget = { kind:'diode', orientation, r, c };
+    renderSidebar();
+  } else if(action==='insulator'){
+    if(getEdge(orientation,r,c)){ flashBoardIllegal(); return; }
+    setEdge(orientation,r,c, { type:'insulator' });
+    counts[current].insulator--;
+    log(`${current} → 절연체 설치`, true);
+    finishTurn();
+  } else if(action==='flip'){
+    const e = getEdge(orientation,r,c);
+    if(!e || e.type!=='diode'){ flashBoardIllegal(); return; }
+    if(e.placedBy===current){ flashMsg('자신이 놓은 다이오드는 변경할 수 없습니다.'); return; }
+    e.dir = 1 - e.dir;
+    e.placedBy = current;
+    log(`${current} → 다이오드 방향 변경`, true);
+    finishTurn();
+  }
+}
+
+function onCellClick(cr, cc){
+  if(phase!=='play' || gameOver) return;
+  if(action==='diagonal'){
+    if(counts[current].diagonal<=0) return;
+    if(diag[cr][cc]){ flashBoardIllegal(); return; }
+    pendingTarget = { kind:'diagonal', cr, cc };
+    renderSidebar();
+  }
+}
+
+function pickDirection(dir){
+  const { orientation, r, c } = pendingTarget;
+  setEdge(orientation, r, c, { type:'diode', dir, placedBy: current });
+  log(`${current} → 다이오드 배치`, true);
+  pendingTarget = null;
+  finishTurn();
+}
+
+function pickOrientation(orient){
+  const { cr, cc } = pendingTarget;
+  diag[cr][cc] = { type:'conductor', orient };
+  counts[current].diagonal--;
+  log(`${current} → 대각선 도선 설치`, true);
+  pendingTarget = null;
+  finishTurn();
+}
+
+function cancelPending(){ pendingTarget = null; renderSidebar(); }
+
+function finishTurn(){
+  render();
+  if(checkWin(current)){ declareWin(current); return; }
+  current = current==='A' ? 'B' : 'A';
+  action = 'diode';
+  log(`--- ${current} 턴 ---`);
+  renderSidebar();
+}
+
+function declareWin(owner){
+  gameOver = true;
+  render(); renderSidebar();
+  document.getElementById('winTitle').textContent = `🏆 ${owner==='A'?'빨강(A)':'파랑(B)'} 승리!`;
+  document.getElementById('winDesc').textContent = `${owner} 플레이어가 자신의 두 단자를 전류로 연결했습니다!`;
+  document.getElementById('winOverlay').classList.add('show');
+}
+
+// ---------- rendering ----------
+function svgLine(cls, x1,y1,x2,y2, extra=''){
+  return `<line class="${cls}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${extra}></line>`;
+}
+
+function render(){
+  let s = '';
+
+  // cells (diagonal conductor only)
+  for(let cr=0; cr<CELLS; cr++){
+    for(let cc=0; cc<CELLS; cc++){
+      const {x:x0,y:y0} = pos(cr,cc);
+      const {x:x1,y:y1} = pos(cr+1,cc+1);
+      const d = diag[cr][cc];
+      if(d){
+        if(d.orient==='\\') s += svgLine('diag-conductor', x0,y0,x1,y1);
+        else s += svgLine('diag-conductor', x1,y0,x0,y1);
+      }
+      if(phase==='play' && action==='diagonal'){
+        s += `<rect class="cell-hit" data-kind="cell" data-cr="${cr}" data-cc="${cc}" x="${x0}" y="${y0}" width="${SPACING}" height="${SPACING}"></rect>`;
+      }
+    }
+  }
+
+  const showDiodeHint = phase==='play' && action==='diode' && !gameOver;
+
+  // horizontal edges
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N-1;c++){
+      const p1 = pos(r,c), p2 = pos(r,c+1);
+      const e = hEdges[r][c];
+      let baseCls = 'edge-visible';
+      if(!e && showDiodeHint && canPlaceDiode('H',r,c,current)) baseCls='edge-suggest';
+      s += svgLine(baseCls, p1.x,p1.y,p2.x,p2.y);
+      if(e){
+        if(e.type==='insulator'){ s += svgLine('edge-insulator', p1.x,p1.y,p2.x,p2.y); }
+        else {
+          const midx=(p1.x+p2.x)/2;
+          if(e.dir===0) s += svgLine('edge-diode-'+e.placedBy, midx-4,p1.y, p2.x,p2.y);
+          else s += svgLine('edge-diode-'+e.placedBy, p1.x,p1.y, midx+4,p1.y);
+        }
+      }
+      if(phase==='play') s += svgLine('edge-hit', p1.x,p1.y,p2.x,p2.y, `data-kind="edge" data-orient="H" data-r="${r}" data-c="${c}"`);
+    }
+  }
+  // vertical edges
+  for(let r=0;r<N-1;r++){
+    for(let c=0;c<N;c++){
+      const p1 = pos(r,c), p2 = pos(r+1,c);
+      const e = vEdges[r][c];
+      let baseCls = 'edge-visible';
+      if(!e && showDiodeHint && canPlaceDiode('V',r,c,current)) baseCls='edge-suggest';
+      s += svgLine(baseCls, p1.x,p1.y,p2.x,p2.y);
+      if(e){
+        if(e.type==='insulator'){ s += svgLine('edge-insulator', p1.x,p1.y,p2.x,p2.y); }
+        else {
+          const midy=(p1.y+p2.y)/2;
+          if(e.dir===0) s += svgLine('edge-diode-'+e.placedBy, p1.x,midy-4, p2.x,p2.y);
+          else s += svgLine('edge-diode-'+e.placedBy, p1.x,p1.y, p1.x,midy+4);
+        }
+      }
+      if(phase==='play') s += svgLine('edge-hit', p1.x,p1.y,p2.x,p2.y, `data-kind="edge" data-orient="V" data-r="${r}" data-c="${c}"`);
+    }
+  }
+
+  // nodes
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const {x,y} = pos(r,c);
+      const isTermA = terminals.A.some(p=>eq(p,[r,c]));
+      const isTermB = terminals.B.some(p=>eq(p,[r,c]));
+      let cls = 'node-dot', label='', radius=6, clickable=false;
+
+      if(isTermA){ cls='node-terminal A'; label='A'; radius=12; }
+      else if(isTermB){ cls='node-terminal B'; label='B'; radius=12; }
+      else if(phase==='setup' && isBoundary(r,c)){
+        const isTempStart = eq([r,c], tempStart);
+        if(isTempStart){ cls = 'node-terminal '+setupSide; label=setupSide; radius=12; }
+        else { cls='node-pick-candidate'; clickable=true; }
+      }
+
+      s += `<circle class="${cls}" data-kind="${clickable?'setupnode':''}" data-r="${r}" data-c="${c}" cx="${x}" cy="${y}" r="${radius}" style="${clickable?'cursor:pointer':''}"></circle>`;
+      if(label) s += `<text class="node-label" x="${x}" y="${y}">${label}</text>`;
+    }
+  }
+
+  boardEl.innerHTML = s;
+}
+
+// ---------- sidebar ----------
+function renderSidebar(){
+  if(phase==='setup'){
+    const side = setupSide;
+    let title='', desc='';
+    if(setupStep==='start'){ title=`${side} 플레이어: 시작점 선택`; desc='가장자리(테두리) 노드 중 <b>시작점</b>을 클릭하세요.<br>상대방은 이 화면을 보지 않아야 합니다.'; }
+    else { title=`${side} 플레이어: 끝점 선택`; desc='이번엔 <b>끝점</b>이 될 가장자리 노드를 클릭하세요.'; }
+
+    sideEl.innerHTML = `
+      <div class="setup-box">
+        <h2 style="color:var(--${side==='A'?'a-glow':'b-glow'})">${title}</h2>
+        <p>${desc}</p>
+        <div class="picked">${setupMsg}</div>
+      </div>
+    `;
+    return;
+  }
+
+  let pickerHtml = '';
+  if(pendingTarget){
+    if(pendingTarget.kind==='diode'){
+      const { orientation } = pendingTarget;
+      const opts = orientation==='H'
+        ? [['오른쪽으로 흐름 →',0],['왼쪽으로 흐름 ←',1]]
+        : [['아래로 흐름 ↓',0],['위로 흐름 ↑',1]];
+      pickerHtml = `
+        <div class="picker">
+          <div class="ptitle">전류 방향을 선택하세요</div>
+          <div class="pbtns">
+            <button onclick="pickDirection(${opts[0][1]})">${opts[0][0]}</button>
+            <button onclick="pickDirection(${opts[1][1]})">${opts[1][0]}</button>
+          </div>
+          <button class="cancel" onclick="cancelPending()">취소</button>
+        </div>`;
+    } else if(pendingTarget.kind==='diagonal'){
+      pickerHtml = `
+        <div class="picker">
+          <div class="ptitle">대각선 도선 방향을 선택하세요</div>
+          <div class="pbtns">
+            <button onclick="pickOrientation('\\\\')">╲</button>
+            <button onclick="pickOrientation('/')">╱</button>
+          </div>
+          <button class="cancel" onclick="cancelPending()">취소</button>
+        </div>`;
+    }
+  }
+
+  sideEl.innerHTML = `
+    <div class="turn-badge ${current}"><span class="dot-sm"></span><span>${gameOver ? '게임 종료' : current+' 턴 — 행동을 선택하세요'}</span></div>
+    ${pickerHtml}
+    <div class="actions">
+      <div class="action-btn ${action==='diode'?'active':''}" data-action="diode"><span>🔌 다이오드 배치 (변, 자신의 다이오드에 인접)</span><span class="count">무제한</span></div>
+      <div class="action-btn ${action==='insulator'?'active':''} ${counts[current].insulator<=0?'disabled':''}" data-action="insulator"><span>▦ 절연체 (변, 어디든 가능)</span><span class="count">${counts[current].insulator}개 남음</span></div>
+      <div class="action-btn ${action==='diagonal'?'active':''} ${counts[current].diagonal<=0?'disabled':''}" data-action="diagonal"><span>◈ 대각선 도선 (칸 안)</span><span class="count">${counts[current].diagonal}개 남음</span></div>
+      <div class="action-btn ${action==='flip'?'active':''}" data-action="flip"><span>↺ 상대 다이오드 변경</span><span class="count">1턴 소모</span></div>
+    </div>
+    <div class="log" id="logBox">${logArr.map(l=>`<div class="${l.you?'you':''}">${l.msg}</div>`).join('')}</div>
+    <button id="restart">🔄 새 게임</button>
+    <div class="rules">
+      <details>
+        <summary>규칙 요약</summary>
+        <p style="margin:8px 0 0">
+        <b>단자 선택</b>: 시작 시 각자 가장자리 노드 중 시작점·끝점을 몰래 고릅니다.<br>
+        <b>목표</b>: 자신의 두 단자를 다이오드로 연결하는 전류 경로를 완성하면 즉시 승리.<br>
+        <b>다이오드</b>: 사각형의 변에 설치하며(방향 선택), <b>첫 다이오드는 자신의 시작점과 맞닿은 변</b>에, 이후에는 <b>자신이 이미 놓은 다이오드와 맞닿은 변</b>에만 놓을 수 있습니다.<br>
+        <b>절연체</b>: 게임당 1개, 변이라면 <b>어디든</b> 설치 가능(인접 조건 없음), 그 변을 영구히 막음.<br>
+        <b>대각선 도선</b>: 게임당 1개, 칸 내부 대각선에 설치, 양방향으로 통함.<br>
+        <b>변경</b>: 상대가 놓은 다이오드 1개의 방향을 뒤집을 수 있음(내 것은 불가).
+        </p>
+      </details>
+    </div>
+  `;
+
+  sideEl.querySelectorAll('.action-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(gameOver || pendingTarget) return;
+      const a = btn.dataset.action;
+      if(a==='diagonal' && counts[current].diagonal<=0) return;
+      if(a==='insulator' && counts[current].insulator<=0) return;
+      action = a;
+      render();
+      renderSidebar();
+    });
+  });
+  const rb = document.getElementById('restart');
+  if(rb) rb.addEventListener('click', ()=>{
+    document.getElementById('winOverlay').classList.remove('show');
+    initGame();
+  });
+}
+
+// ---------- event delegation on board ----------
+function setupBoardEvents(){
+  boardEl.addEventListener('click', (e)=>{
+    const t = e.target.closest('[data-kind]');
+    if(!t) return;
+    const kind = t.dataset.kind;
+    if(kind==='setupnode'){
+      onSetupNodeClick(+t.dataset.r, +t.dataset.c);
+    } else if(kind==='edge'){
+      onEdgeClick(t.dataset.orient, +t.dataset.r, +t.dataset.c);
+    } else if(kind==='cell'){
+      onCellClick(+t.dataset.cr, +t.dataset.cc);
+    }
+  });
+}
+
+document.getElementById('winRestart').addEventListener('click', ()=>{
+  document.getElementById('winOverlay').classList.remove('show');
+  initGame();
+});
+
+boardEl = document.getElementById('board');
+sideEl = document.getElementById('sidePanel');
+setupBoardEvents();
+initGame();
+</script>
+</body>
+</html>
