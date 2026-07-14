@@ -129,7 +129,6 @@ const CELLS = N - 1;
 
 function key(r,c){ return r+','+c; }
 function pos(r,c){ return { x: MARGIN + c*SPACING, y: MARGIN + r*SPACING }; }
-function isBoundary(r,c){ return r===0 || r===N-1 || c===0 || c===N-1; }
 function eq(p1,p2){ return p1 && p2 && p1[0]===p2[0] && p1[1]===p2[1]; }
 
 function edgesAtNode(r,c){
@@ -290,22 +289,19 @@ function canPlaceDiode(o,r,c,player){
 }
 
 // ---------- setup phase ----------
+// A always owns the top-right / bottom-left diagonal, B always owns the
+// top-left / bottom-right diagonal. Each player only picks which of their
+// two fixed corners is the start (the other becomes the end automatically).
+const CORNERS = { A: [[0,N-1],[N-1,0]], B: [[0,0],[N-1,N-1]] };
+
 function onSetupNodeClick(r,c){
   if(phase!=='setup') return;
-  if(setupStep==='start' || setupStep==='end'){
-    if(!isBoundary(r,c)){ flashMsg('가장자리(테두리) 노드만 선택할 수 있습니다.'); return; }
-    const other = setupSide==='A' ? 'B' : 'A';
-    if(terminals[other].some(p=>eq(p,[r,c]))){ flashMsg('이미 사용된 노드입니다. 다른 곳을 선택하세요.'); return; }
-    if(setupStep==='start'){
-      tempStart = [r,c];
-      setupStep = 'end';
-      render(); renderSidebar();
-    } else {
-      if(eq([r,c], tempStart)){ flashMsg('시작점과 다른 노드를 선택하세요.'); return; }
-      tempEnd = [r,c];
-      finishSetupSide();
-    }
-  }
+  const mine = CORNERS[setupSide];
+  const idx = mine.findIndex(p=>eq(p,[r,c]));
+  if(idx<0){ flashMsg('강조 표시된 자신의 두 코너 중 한 곳만 선택할 수 있습니다.'); return; }
+  tempStart = mine[idx];
+  tempEnd = mine[1-idx];
+  finishSetupSide();
 }
 
 function finishSetupSide(){
@@ -313,7 +309,7 @@ function finishSetupSide(){
   if(setupSide==='A'){
     setupSide = 'B'; setupStep = 'start'; tempStart=null; tempEnd=null;
     render(); renderSidebar();
-    showHandoff('B 플레이어 차례', 'A의 선택이 완료되었습니다. B 플레이어가 화면을 확인하고, 시작점 → 끝점 순서로 단자를 정하세요.', ()=>{
+    showHandoff('B 플레이어 차례', 'A의 선택이 완료되었습니다. B 플레이어가 화면을 확인하고, 자신의 두 코너 중 시작점을 정하세요.', ()=>{
       render(); renderSidebar();
     });
   } else {
@@ -494,10 +490,8 @@ function render(){
 
       if(isTermA){ cls='node-terminal A'; label='A'; radius=12; }
       else if(isTermB){ cls='node-terminal B'; label='B'; radius=12; }
-      else if(phase==='setup' && isBoundary(r,c)){
-        const isTempStart = eq([r,c], tempStart);
-        if(isTempStart){ cls = 'node-terminal '+setupSide; label=setupSide; radius=12; }
-        else { cls='node-pick-candidate'; clickable=true; }
+      else if(phase==='setup' && CORNERS[setupSide].some(p=>eq(p,[r,c]))){
+        cls='node-pick-candidate'; clickable=true; radius=10;
       }
 
       s += `<circle class="${cls}" data-kind="${clickable?'setupnode':''}" data-r="${r}" data-c="${c}" cx="${x}" cy="${y}" r="${radius}" style="${clickable?'cursor:pointer':''}"></circle>`;
@@ -512,9 +506,8 @@ function render(){
 function renderSidebar(){
   if(phase==='setup'){
     const side = setupSide;
-    let title='', desc='';
-    if(setupStep==='start'){ title=`${side} 플레이어: 시작점 선택`; desc='가장자리(테두리) 노드 중 <b>시작점</b>을 클릭하세요.<br>상대방은 이 화면을 보지 않아야 합니다.'; }
-    else { title=`${side} 플레이어: 끝점 선택`; desc='이번엔 <b>끝점</b>이 될 가장자리 노드를 클릭하세요.'; }
+    const title = `${side} 플레이어: 시작점 선택`;
+    const desc = `${side}의 두 단자(대각선 코너, 강조 표시됨) 중 <b>시작점</b>으로 쓸 곳을 클릭하세요. 나머지 하나가 자동으로 끝점이 됩니다.<br>상대방은 이 화면을 보지 않아야 합니다.`;
 
     sideEl.innerHTML = `
       <div class="setup-box">
@@ -570,7 +563,7 @@ function renderSidebar(){
       <details>
         <summary>규칙 요약</summary>
         <p style="margin:8px 0 0">
-        <b>단자 선택</b>: 시작 시 각자 가장자리 노드 중 시작점·끝점을 몰래 고릅니다.<br>
+        <b>단자 선택</b>: A는 우상단↔좌하단, B는 좌상단↔우하단 대각선 코너로 고정되며, 각자 그중 어느 쪽을 시작점으로 할지만 몰래 고릅니다.<br>
         <b>목표</b>: 자신의 두 단자를 다이오드로 연결하는 전류 경로를 완성하면 즉시 승리.<br>
         <b>다이오드</b>: 사각형의 변에 설치하며(방향 선택), <b>첫 다이오드는 자신의 시작점과 맞닿은 변</b>에, 이후에는 <b>자신이 이미 놓은 다이오드와 맞닿은 변</b>에만 놓을 수 있습니다.<br>
         <b>절연체</b>: 게임당 1개, 변이라면 <b>어디든</b> 설치 가능(인접 조건 없음), 그 변을 영구히 막음.<br>
