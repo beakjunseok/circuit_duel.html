@@ -277,20 +277,6 @@ function potentiallyConnected(player){
   return false;
 }
 
-function edgeHasOwnDiode(o,r,c,player){
-  const e = getEdge(o,r,c);
-  return !!(e && e.type==='diode' && e.placedBy===player);
-}
-function isAdjacentToOwnDiode(o,r,c,player){
-  const [n1,n2] = edgeEndpoints(o,r,c);
-  for(const n of [n1,n2]){
-    for(const e2 of edgesAtNode(n[0],n[1])){
-      if(e2.o===o && e2.r===r && e2.c===c) continue;
-      if(edgeHasOwnDiode(e2.o,e2.r,e2.c,player)) return true;
-    }
-  }
-  return false;
-}
 function edgeTouchesNode(o,r,c, node){
   const [n1,n2] = edgeEndpoints(o,r,c);
   return eq(n1,node) || eq(n2,node);
@@ -300,9 +286,43 @@ function hasAnyOwnDiode(player){
   for(let r=0;r<N-1;r++) for(let c=0;c<N;c++){ const e=vEdges[r][c]; if(e && e.type==='diode' && e.placedBy===player) return true; }
   return false;
 }
+
+// All nodes that count as part of `player`'s existing network: their start
+// node, every endpoint of a diode edge they've placed, and anything reachable
+// from those through a diagonal conductor (any player's - it's shared wiring
+// once placed), so a diode can also be built off of a diagonal connection.
+function networkNodes(player){
+  const nodes = new Set();
+  const start = terminals[player][0];
+  nodes.add(key(start[0],start[1]));
+  for(let r=0;r<N;r++) for(let c=0;c<N-1;c++){
+    const e = hEdges[r][c];
+    if(e && e.type==='diode' && e.placedBy===player){ nodes.add(key(r,c)); nodes.add(key(r,c+1)); }
+  }
+  for(let r=0;r<N-1;r++) for(let c=0;c<N;c++){
+    const e = vEdges[r][c];
+    if(e && e.type==='diode' && e.placedBy===player){ nodes.add(key(r,c)); nodes.add(key(r+1,c)); }
+  }
+  let changed = true;
+  while(changed){
+    changed = false;
+    for(let cr=0;cr<CELLS;cr++) for(let cc=0;cc<CELLS;cc++){
+      const d = diag[cr][cc];
+      if(!d) continue;
+      const TL=[cr,cc], TR=[cr,cc+1], BL=[cr+1,cc], BR=[cr+1,cc+1];
+      const pair = d.orient==='\\' ? [TL,BR] : [TR,BL];
+      const k0 = key(pair[0][0],pair[0][1]), k1 = key(pair[1][0],pair[1][1]);
+      if(nodes.has(k0) && !nodes.has(k1)){ nodes.add(k1); changed = true; }
+      if(nodes.has(k1) && !nodes.has(k0)){ nodes.add(k0); changed = true; }
+    }
+  }
+  return nodes;
+}
+
 function canPlaceDiode(o,r,c,player){
-  if(!hasAnyOwnDiode(player)) return edgeTouchesNode(o,r,c, terminals[player][0]);
-  return isAdjacentToOwnDiode(o,r,c,player);
+  const nodes = networkNodes(player);
+  const [n1,n2] = edgeEndpoints(o,r,c);
+  return nodes.has(key(n1[0],n1[1])) || nodes.has(key(n2[0],n2[1]));
 }
 
 // ---------- setup phase ----------
